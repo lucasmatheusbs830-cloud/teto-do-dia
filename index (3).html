@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0E7C66">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Teto do Dia</title>
+<style>
+:root{--bg:#F1F4F3;--sf:#fff;--ink:#12292B;--mut:#5B7073;--ok:#0E7C66;--onok:#fff;--over:#B3263E;--gold:#8A6A12;--line:#D5DEDC}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1A1B;--sf:#152526;--ink:#E7F0EE;--mut:#93A9AB;--ok:#3CC4A4;--onok:#06201B;--over:#FF6B80;--gold:#E0B84A;--line:#253A3B}}
+*{box-sizing:border-box;margin:0}
+body{font:16px/1.4 system-ui,Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+main{max-width:480px;margin:auto;padding:calc(20px + env(safe-area-inset-top)) 16px 20px}
+h1{font-size:15px;font-weight:600;color:var(--mut)}
+.num{font-variant-numeric:tabular-nums}
+.hero{margin:6px 0 18px}
+.big{font-size:46px;font-weight:700;letter-spacing:-1px;line-height:1.15}
+.gauge{height:12px;background:var(--line);border-radius:6px;overflow:hidden;margin:12px 0 4px}
+.gauge i{display:block;height:100%;background:var(--ok);border-radius:6px}
+.over .big{color:var(--over)}.over .gauge i{background:var(--over)}
+.card{background:var(--sf);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;padding:8px 0;gap:12px}
+.row+.row{border-top:1px solid var(--line)}
+.row span{color:var(--mut)}
+label{display:block;font-size:14px;color:var(--mut);margin:12px 0 4px}
+input,select{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:13px 16px;background:var(--ok);color:var(--onok);width:100%;margin-top:14px}
+button.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.del{background:transparent;color:var(--over);border:1px solid var(--over)}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--sf);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;margin:0;border-radius:0;background:none;color:var(--mut);padding:15px 4px;font-size:14px}
+nav button.on{color:var(--ok);box-shadow:inset 0 3px 0 var(--ok)}
+.item{display:flex;justify-content:space-between;gap:12px;padding:10px 0;cursor:pointer}
+.item+.item{border-top:1px solid var(--line)}
+.item small{display:block;color:var(--mut)}
+.neg{color:var(--over)}.pos{color:var(--ok)}.sv{color:var(--gold)}
+.note{color:var(--mut);font-size:14px;margin-top:6px}
+.two{display:flex;gap:10px}
+</style>
+</head>
+<body>
+<main id="m"></main>
+<nav>
+<button data-t="hoje" onclick="go('hoje')">Hoje</button>
+<button data-t="lanc" onclick="go('lanc')">Lançar</button>
+<button data-t="cofre" onclick="go('cofre')">Cofre</button>
+<button data-t="mes" onclick="go('mes')">Mês</button>
+</nav>
+<script>
+const K='tetodia.v1',$=i=>document.getElementById(i);
+let D=JSON.parse(localStorage.getItem(K)||'null')||{orc:{},lan:[],fech:{}};D.dia=D.dia||1;D.ini=D.ini||0;
+let tab='hoje',f=null,dt0='',cloud=null,user=null,ready=false,loaded=false;
+const save=()=>{if(cloud)cloud.setCfg({orc:D.orc,fech:D.fech,dia:D.dia,ini:D.ini});else localStorage.setItem(K,JSON.stringify(D))};
+const brl=c=>(c/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const inp=c=>(c/100).toFixed(2).replace('.',',');
+const pad=n=>String(n).padStart(2,'0');
+const nowStr=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`};
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const parse=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?null:Math.round(n*100)};
+const mes=k=>new Date(+k.slice(0,4),+k.slice(5,7)-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
+const T={G:'Gastar',P:'Poupar',R:'Resgatar do cofre',S:'Receber salário'};
+const soma=a=>a.reduce((s,l)=>s+l.v,0);
+const cofre=ex=>D.lan.reduce((s,l)=>l.id===ex?s:s+(l.t==='P'?l.v:l.t==='R'?-l.v:0),0);
+const saldo=()=>D.lan.reduce((s,l)=>s+({S:1,R:1,G:-1,P:-1}[l.t])*l.v,D.ini||0);
+const byDate=a=>[...a].sort((x,y)=>y.dt.localeCompare(x.dt));
+const dim=(y,m)=>new Date(y,m,0).getDate();
+const sd=(y,m)=>Math.min(D.dia||1,dim(y,m));
+function cyc(ds){
+ let y=+ds.slice(0,4),m=+ds.slice(5,7);
+ if(+ds.slice(8,10)<sd(y,m)){m--;if(!m){m=12;y--}}
+ return y+'-'+pad(m);
+}
+function cinfo(k){
+ const y=+k.slice(0,4),m=+k.slice(5,7),ny=m===12?y+1:y,nm=m===12?1:m+1;
+ const a=Date.UTC(y,m-1,sd(y,m)),b=Date.UTC(ny,nm-1,sd(ny,nm));
+ return{a,dias:Math.round((b-a)/864e5)};
+}
+const fd=t=>{const d=new Date(t);return pad(d.getUTCDate())+'/'+pad(d.getUTCMonth()+1)};
+const rot=k=>{const i=cinfo(k);return fd(i.a)+' a '+fd(i.a+(i.dias-1)*864e5)};
+
+function calc(){
+ const n=nowStr(),td=n.slice(0,10),mk=cyc(td),ci=cinfo(mk);
+ const d=Math.round((Date.UTC(+td.slice(0,4),+td.slice(5,7)-1,+td.slice(8,10))-ci.a)/864e5)+1;
+ const orc=D.orc[mk],g=D.lan.filter(l=>l.t==='G'&&cyc(l.dt.slice(0,10))===mk);
+ const ate=soma(g.filter(l=>l.dt.slice(0,10)<td)),hoje=soma(g.filter(l=>l.dt.slice(0,10)===td)),total=soma(g);
+ const rest=ci.dias-d+1,teto=orc==null?0:Math.max(0,(orc-ate)/rest);
+ return{mk,nome:rot(mk),dias:ci.dias,rest,orc,hoje,total,fixo:orc==null?0:orc/ci.dias,teto,livre:teto-hoje,sobra:orc==null?0:orc-total};
+}
+function pend(){
+ const mk=cyc(nowStr().slice(0,10));
+ for(const k of Object.keys(D.orc).sort()){
+  if(k>=mk||D.fech[k])continue;
+  const sobra=D.orc[k]-soma(D.lan.filter(l=>l.t==='G'&&cyc(l.dt.slice(0,10))===k));
+  if(sobra>0)return{k,sobra,nome:rot(k)};
+ }
+ return null;
+}
+function lista(a){
+ if(!a.length)return '<p class="note">Nada por aqui ainda.</p>';
+ const cl={G:'neg',S:'pos',R:'pos',P:'sv'},sg={G:'−',S:'+',R:'+',P:''};
+ return byDate(a).map(l=>`<div class="item" onclick="edita('${l.id}')"><div>${esc(l.desc)||T[l.t]}<small>${T[l.t]} · ${l.dt.slice(8,10)}/${l.dt.slice(5,7)} ${l.dt.slice(11,16)}</small></div><b class="num ${cl[l.t]}">${sg[l.t]}${brl(l.v)}</b></div>`).join('');
+}
+
+function vHoje(){
+ const c=calc(),p=pend();let h='';
+ if(p)h+=`<div class="card"><b>Sobrou ${brl(p.sobra)} no ciclo ${p.nome}</b><p class="note">Quer poupar esse valor?</p><button onclick="aceita('${p.k}',${p.sobra})">Poupar ${brl(p.sobra)}</button><button class="sec" onclick="recusa('${p.k}')">Agora não</button></div>`;
+ if(c.orc==null)return h+`<div class="card"><b>Defina o orçamento do ciclo de ${c.nome}</b><p class="note">O teto diário é calculado a partir dele.</p><button onclick="go('mes')">Definir orçamento</button></div>`;
+ const over=c.livre<0,pct=c.teto>0?Math.min(100,c.hoje/c.teto*100):100;
+ h+=`<section class="hero ${over?'over':''}"><h1>${over?'Acima do teto hoje':'Ainda pode gastar hoje'}</h1><div class="big num">${brl(Math.abs(c.livre))}</div><div class="gauge"><i style="width:${pct}%"></i></div><p class="note">Ciclo de ${c.nome}</p></section>
+ <div class="card"><div class="row"><span>Teto fixo</span><b class="num">${brl(c.fixo)}</b></div><div class="row"><span>Teto de hoje (recalculado)</span><b class="num">${brl(c.teto)}</b></div><div class="row"><span>Gasto hoje</span><b class="num">${brl(c.hoje)}</b></div></div>
+ <div class="card"><div class="row"><span>Gasto no ciclo</span><b class="num">${brl(c.total)}</b></div><div class="row"><span>Sobra do ciclo</span><b class="num ${c.sobra<0?'neg':''}">${brl(c.sobra)}</b></div></div>`;
+ if(c.teto===0)h+='<p class="note">O orçamento do mês já foi todo usado.</p>';
+ return h;
+}
+function vLanc(){
+ const e=f||{t:'G',v:'',desc:'',dt:nowStr()},ed=f&&f.id;dt0=e.dt;
+ return `<div class="card"><h1>${ed?'Editar lançamento':'Novo lançamento'}</h1>
+ <label>Tipo</label><select id="t">${Object.entries(T).map(([k,n])=>`<option value="${k}" ${k===e.t?'selected':''}>${n}</option>`).join('')}</select>
+ <label>Valor (R$)</label><input id="v" inputmode="decimal" placeholder="0,00" value="${e.v===''?'':inp(e.v)}">
+ <label>Descrição (opcional)</label><input id="d" value="${esc(e.desc)}">
+ <label>Data e hora</label><input id="dt" type="datetime-local" value="${e.dt}">
+ <button onclick="salvar()">${ed?'Salvar alterações':'Lançar'}</button>
+ ${ed?'<button class="del" onclick="excluir()">Excluir</button><button class="sec" onclick="f=null;render()">Cancelar</button>':''}</div>
+ <div class="card"><h1>Histórico</h1>${lista(D.lan)}</div>`;
+}
+function vCofre(){
+ return `<section class="hero"><h1>Total no cofre</h1><div class="big num sv">${brl(cofre())}</div></section>
+ <div class="two"><button onclick="novo('P')">Poupar</button><button class="sec" onclick="novo('R')">Resgatar</button></div>
+ <div class="card" style="margin-top:14px"><div class="row"><span>Saldo em conta corrente</span><b class="num ${saldo()<0?'neg':''}">${brl(saldo())}</b></div></div>
+ <div class="card"><h1>Movimentações do cofre</h1>${lista(D.lan.filter(l=>l.t==='P'||l.t==='R'))}</div>`;
+}
+function vMes(){
+ const c=calc(),ks=Object.keys(D.orc).sort(),ult=ks.length?D.orc[ks[ks.length-1]]:null,v=c.orc!=null?c.orc:ult;
+ return `<div class="card"><h1>Início do mês orçamentário</h1>
+ <label>Dia em que o ciclo começa (1 a 31)</label><input id="dia" type="number" min="1" max="31" inputmode="numeric" value="${D.dia}">
+ <button onclick="salvaDia()">Salvar dia</button>
+ <p class="note">Seu ciclo atual vai de ${c.nome}. Mudar o dia reorganiza os ciclos dos lançamentos antigos.</p></div>
+ <div class="card"><h1>Orçamento do ciclo (${c.nome})</h1>
+ <label>Quanto quer gastar no ciclo (R$)</label><input id="o" inputmode="decimal" placeholder="800,00" value="${v==null?'':inp(v)}">
+ <button onclick="salvaOrc()">Salvar orçamento</button>
+ ${c.orc!=null?`<p class="note">Teto fixo: ${brl(c.fixo)} por dia, em ${c.dias} dias.</p>`:''}</div>
+ ${c.orc!=null?`<div class="card"><div class="row"><span>Gasto no ciclo</span><b class="num">${brl(c.total)}</b></div><div class="row"><span>Sobra do ciclo</span><b class="num">${brl(c.sobra)}</b></div><div class="row"><span>Dias restantes (com hoje)</span><b class="num">${c.rest}</b></div></div>`:''}
+ <div class="card"><h1>Saldo inicial da conta</h1>
+ <label>Quanto você já tinha na conta corrente (R$)</label><input id="ini" inputmode="decimal" placeholder="0,00" value="${D.ini?inp(D.ini):''}">
+ <button onclick="salvaIni()">Salvar saldo inicial</button>
+ <p class="note">Entra no saldo em conta corrente, somado aos salários e descontado dos gastos e depósitos.</p></div>
+ <div class="card"><h1>Cópia de segurança</h1><p class="note">${cloud?'Seus dados já ficam na nuvem. Uma cópia extra não faz mal.':'Seus dados ficam neste aparelho. Salve uma cópia de vez em quando.'}</p>
+ <button class="sec" onclick="exporta()">Salvar cópia</button>
+ <label>Restaurar cópia</label><input type="file" accept="application/json" onchange="importa(event)"></div>
+ ${cloud&&user?`<div class="card"><h1>Conta</h1><p class="note">${esc(user.email)}</p><button class="sec" onclick="sair()">Sair</button></div>`:''}`;
+}
+
+function render(){
+ const logged=!cloud||user;
+ document.querySelector('nav').style.display=ready&&logged&&loaded?'flex':'none';
+ if(!ready||(logged&&!loaded)){$('m').innerHTML='<p class="note">Carregando…</p>';return}
+ if(!logged){$('m').innerHTML=vLogin();return}
+ $('m').innerHTML={hoje:vHoje,lanc:vLanc,cofre:vCofre,mes:vMes}[tab]();
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+}
+function go(t){tab=t;if(t!=='lanc')f=null;render();scrollTo(0,0)}
+function novo(t){f={t,v:'',desc:'',dt:nowStr()};tab='lanc';render();scrollTo(0,0)}
+function edita(id){f={...D.lan.find(l=>l.id===id)};tab='lanc';render();scrollTo(0,0)}
+function salvar(){
+ const t=$('t').value,v=parse($('v').value);let dt=$('dt').value;
+ if(!v||v<=0)return alert('Digite um valor maior que zero.');
+ if(!dt)return alert('Informe a data e a hora.');
+ const ex=f&&f.id?f.id:null;
+ if(t==='R'&&v>cofre(ex))return alert('O cofre tem apenas '+brl(cofre(ex))+'.');
+ if(!ex&&dt===dt0)dt=nowStr();
+ const o={t,v,desc:$('d').value.trim(),dt};
+ const id=ex||Date.now().toString(36);
+ if(ex)Object.assign(D.lan.find(l=>l.id===ex),o);else D.lan.push({id,...o});
+ f=null;if(cloud)cloud.setLan(id,o);else save();render();scrollTo(0,0);
+}
+function excluir(){if(confirm('Excluir este lançamento?')){const id=f.id;D.lan=D.lan.filter(l=>l.id!==id);f=null;if(cloud)cloud.delLan(id);else save();render()}}
+function salvaDia(){const v=parseInt($('dia').value,10);if(!(v>=1&&v<=31))return alert('Digite um dia de 1 a 31.');D.dia=v;save();render()}
+function salvaIni(){const t=$('ini').value.trim(),v=t===''?0:parse(t);if(v==null)return alert('Digite um valor válido.');D.ini=v;save();render()}
+function salvaOrc(){const v=parse($('o').value);if(!v||v<=0)return alert('Digite um valor maior que zero.');D.orc[calc().mk]=v;save();go('hoje')}
+function aceita(k,s){D.fech[k]=1;save();f={t:'P',v:s,desc:'Sobra do ciclo '+rot(k),dt:nowStr()};tab='lanc';render();scrollTo(0,0)}
+function recusa(k){D.fech[k]=1;save();render()}
+function exporta(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='teto-do-dia-copia.json';a.click()}
+function importa(e){const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.lan||!x.orc)throw 0;D=x;D.fech=D.fech||{};D.dia=D.dia||1;D.ini=D.ini||0;if(cloud)D.lan.forEach(l=>cloud.setLan(l.id,l));save();render();alert('Cópia restaurada.')}catch{alert('Arquivo inválido.')}};r.readAsText(e.target.files[0])}
+
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&tab!=='lanc')render()});
+function vLogin(){return `<div class="card"><h1>Entrar na sua conta</h1>
+ <label>E-mail</label><input id="em" type="email" autocomplete="email">
+ <label>Senha</label><input id="pw" type="password" autocomplete="current-password">
+ <p id="err" class="note neg"></p>
+ <button onclick="entrar()">Entrar</button><button class="sec" onclick="criar()">Criar conta</button><button class="sec" onclick="esqueci()">Esqueci a senha</button></div>
+ <p class="note">Seus lançamentos ficam salvos na nuvem e aparecem em qualquer aparelho em que você entrar.</p>`}
+const msgErr=e=>({'auth/invalid-credential':'E-mail ou senha incorretos.','auth/invalid-email':'E-mail inválido.','auth/email-already-in-use':'Este e-mail já tem conta. Toque em Entrar.','auth/weak-password':'A senha precisa ter pelo menos 6 caracteres.','auth/missing-password':'Digite a senha.','auth/network-request-failed':'Sem internet no momento.','auth/too-many-requests':'Muitas tentativas. Tente de novo em alguns minutos.'}[e.code]||'Não foi possível concluir. Tente de novo.');
+function auth1(fn){$('err').textContent='';fn($('em').value.trim(),$('pw').value).catch(x=>$('err').textContent=msgErr(x))}
+function entrar(){auth1(cloud.login)}
+function criar(){auth1(cloud.signup)}
+function esqueci(){const e=$('em').value.trim();if(!e){$('err').textContent='Digite seu e-mail acima.';return}cloud.reset(e).then(()=>alert('Enviamos um link para o seu e-mail.')).catch(x=>$('err').textContent=msgErr(x))}
+function sair(){if(confirm('Sair da conta?'))cloud.logout()}
+function cloudInit(api){cloud=api;ready=true;loaded=!api;render()}
+function cloudAuth(u){user=u;if(!u){D={orc:{},lan:[],fech:{},dia:1,ini:0};loaded=false;tab='hoje';f=null}render()}
+function cloudData(c,l){D={orc:c.orc||{},fech:c.fech||{},dia:c.dia||1,ini:c.ini||0,lan:l};const was=loaded;loaded=true;if(!was||tab!=='lanc')render()}
+function cloudFail(){ready=true;$('m').innerHTML='<div class="card"><b>Não foi possível conectar</b><p class="note">Abra o app com internet ao menos uma vez e tente de novo.</p><button onclick="location.reload()">Tentar de novo</button></div>'}
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+render();
+</script>
+<script type="module" src="cloud.js"></script>
+</body>
+</html>
