@@ -1,12 +1,9 @@
-// Cole aqui o bloco que o Firebase mostra ao registrar o app web.
-// Substitua TODO o conteúdo entre as chaves { } pelos seus dados.
 const firebaseConfig = {
-  apiKey: "COLE_AQUI",
-  authDomain: "COLE_AQUI",
-  projectId: "COLE_AQUI",
-  storageBucket: "COLE_AQUI",
-  messagingSenderId: "COLE_AQUI",
-  appId: "COLE_AQUI"
-};
-
+  apiKey: "AIzaSyBWh8vLQuzw23MyacSPjcw9wOyg7PRqZtM",
+  authDomain: "teto-do-dia.firebaseapp.com",
+  projectId: "teto-do-dia",
+  storageBucket: "teto-do-dia.firebasestorage.app",
+  messagingSenderId: "890465707687",
+  appId: "1:890465707687:web:bf605b87062791a9351d82"
+}
 export default firebaseConfig;
