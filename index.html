@@ -60,10 +60,10 @@ const nowStr=()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const parse=s=>{s=String(s).trim();if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');const n=parseFloat(s);return isNaN(n)?null:Math.round(n*100)};
 const mes=k=>new Date(+k.slice(0,4),+k.slice(5,7)-1).toLocaleString('pt-BR',{month:'long',year:'numeric'});
-const T={G:'Gastar',P:'Poupar',R:'Resgatar do cofre',S:'Receber salário'};
+const T={G:'Gastar',X:'Gastar fora do orçamento',P:'Poupar',R:'Resgatar do cofre',S:'Receber salário'};
 const soma=a=>a.reduce((s,l)=>s+l.v,0);
 const cofre=ex=>D.lan.reduce((s,l)=>l.id===ex?s:s+(l.t==='P'?l.v:l.t==='R'?-l.v:0),0);
-const saldo=()=>D.lan.reduce((s,l)=>s+({S:1,R:1,G:-1,P:-1}[l.t])*l.v,D.ini||0);
+const saldo=()=>D.lan.reduce((s,l)=>s+({S:1,R:1,G:-1,X:-1,P:-1}[l.t])*l.v,D.ini||0);
 const byDate=a=>[...a].sort((x,y)=>y.dt.localeCompare(x.dt));
 const dim=(y,m)=>new Date(y,m,0).getDate();
 const sd=(y,m)=>Math.min(D.dia||1,dim(y,m));
@@ -99,7 +99,7 @@ function pend(){
 }
 function lista(a){
  if(!a.length)return '<p class="note">Nada por aqui ainda.</p>';
- const cl={G:'neg',S:'pos',R:'pos',P:'sv'},sg={G:'−',S:'+',R:'+',P:''};
+ const cl={G:'neg',X:'neg',S:'pos',R:'pos',P:'sv'},sg={G:'−',X:'−',S:'+',R:'+',P:''};
  return byDate(a).map(l=>`<div class="item" onclick="edita('${l.id}')"><div>${esc(l.desc)||T[l.t]}<small>${T[l.t]} · ${l.dt.slice(8,10)}/${l.dt.slice(5,7)} ${l.dt.slice(11,16)}</small></div><b class="num ${cl[l.t]}">${sg[l.t]}${brl(l.v)}</b></div>`).join('');
 }
 
